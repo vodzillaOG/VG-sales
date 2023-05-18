@@ -4,7 +4,7 @@ from dash import dcc, html
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
 import pandas as pd
-import plotly.graph_objs as go
+import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
@@ -17,7 +17,14 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 # Build the components
-header_component = html.H1("VIDEOGAME SALES ANALYSIS", style={'color': 'darkcyan'})
+header_component = html.H1(
+    "PlayMetrics - videogame sales analysis",
+    style={
+        'color': '#D9ED92',
+        'text-align': 'center'
+    }
+)
+
 
 REGION_OPTIONS = [
     {"label": "Global Sales", "value": "Global_Sales"},
@@ -29,11 +36,10 @@ REGION_OPTIONS = [
 
 
 # Visual components
-# 1 - TREEMAP
 total_sales = df[['JP_Sales', 'EU_Sales', 'NA_Sales', 'Other_Sales']].sum()
 total_sales_billion = total_sales / 1000
 labels = ['JAPAN', 'EUROPE', 'NORTH AMERICA', 'OTHER REGIONS']
-colors = ['red', 'green', 'blue', 'grey']
+colors = ['#34A0A4', '#1A759F', '#184E77', '#76C893']
 
 treemap = go.Figure(go.Treemap(
     labels=labels,
@@ -42,176 +48,255 @@ treemap = go.Figure(go.Treemap(
     texttemplate="%{label}<br>Total Sales: %{value:.2f}B$<br>Percentage: %{percentParent:.2%}",
     textinfo='label+value+percent parent',
     textposition='middle center',
-    marker=dict(line=dict(color='black', width=1), colors=colors)
-)).update_layout(title='TOTAL SALES BY REGION')
+    marker=dict(line=dict(color='#D9ED92', width=1), colors=colors),  # Set the line color to #D9ED92
+    textfont=dict(color='black', size=14)
+)).update_layout(
+    title={
+        'text': 'TOTAL SALES DISTRIBUTION',
+        'x': 0.5,
+        'font': {'color': '#D9ED92', 'size': 30},
+        'xanchor': 'center',
+        'yanchor': 'top'
+    },
+    plot_bgcolor='black',
+    paper_bgcolor='black'
+)
+
 
 
 
 # Component 2
-df['Year'] = pd.to_datetime(df['Year'], format='%Y')
-sales_by_year_region = df.groupby(df['Year'].dt.year)[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum().reset_index()
-sales_by_year_region = pd.melt(sales_by_year_region, id_vars='Year', value_vars=['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales'],
-                               var_name='Sales Region', value_name='Total Sales (Millions)')
+# Group the data by year and sum the sales for each region
 
-sales_by_year_region['Sales Region'] = sales_by_year_region['Sales Region'].map({
-    'NA_Sales': 'NORTH AMERICA',
-    'EU_Sales': 'EUROPE',
-    'JP_Sales': 'JAPAN',
-    'Other_Sales': 'OTHER REGIONS'
-})
+# Group the data by year and sum the sales for each region
+sales_by_region = df.groupby('Year')[['JP_Sales', 'NA_Sales', 'EU_Sales', 'Other_Sales', 'Global_Sales']].sum().reset_index()
 
-fig = px.line(sales_by_year_region, x='Year', y='Total Sales (Millions)', color='Sales Region',
-              title='SALES EVOLUTION OVER TIME',
-              color_discrete_map={'NORTH AMERICA': 'blue', 'EUROPE': 'green', 'JAPAN': 'red', 'OTHER REGIONS': 'grey'})
+# Filter the data for years between 2000 and 2015
+filtered_data = sales_by_region[(sales_by_region['Year'] >= 2000) & (sales_by_region['Year'] <= 2015)]
 
-fig.update_layout(xaxis_title='Year', yaxis_title='Total Sales (Millions)',
-                  plot_bgcolor='white', showlegend=True,
-                  legend=dict(bgcolor='white', title=dict(text='Sales Region')),
-                  xaxis=dict(showgrid=True, gridcolor='white', linecolor='black', linewidth=3),
-                  yaxis=dict(showgrid=True, gridcolor='white', linecolor='black', linewidth=3))
+# Sort the regions by their total sales
+total_sales = filtered_data[['JP_Sales', 'NA_Sales', 'EU_Sales', 'Other_Sales', 'Global_Sales']].sum().sort_values(ascending=False).index
+colors = ['#184E77', '#184E77', '#1A759F', '#34A0A4', '#B5E48C']
 
-max_values = sales_by_year_region.groupby('Sales Region')['Total Sales (Millions)'].max()
-for region, value in max_values.items():
-    df_region = sales_by_year_region[sales_by_year_region['Sales Region'] == region]
-    max_year = df_region[df_region['Total Sales (Millions)'] == value]['Year'].values[0]
+# Define the legend labels
+legend_labels = {
+    'JP_Sales': 'Japan',
+    'NA_Sales': 'North America',
+    'EU_Sales': 'Europe',
+    'Other_Sales': 'Other Regions',
+    'Global_Sales': 'Global Sales'
+}
+
+# Create the stacked area chart
+fig = go.Figure()
+
+for region in ['JP_Sales', 'NA_Sales', 'EU_Sales', 'Other_Sales']:
     fig.add_trace(go.Scatter(
-        x=[max_year],
-        y=[value],
-        mode='markers+text',
-        marker=dict(color='black', size=8),
-        text=[f'{value:.2f}M'],
-        textposition='top right',
-        textfont=dict(size=10),
-        showlegend=False,
-        legendgroup=region,
-        visible=True,
-        name=region
+        x=filtered_data['Year'],
+        y=filtered_data[region],
+        fill='tozeroy',
+        name=legend_labels[region],
+        line=dict(color=colors[total_sales.get_loc(region)], width=0.5),
+        hovertemplate='%{y:.2f} mm',
+        marker=dict(color='#D9ED92')  # Set the marker color to #D9ED92
     ))
 
-unique_years = sales_by_year_region['Year'].unique()
-for year in unique_years:
-    df_year = sales_by_year_region[sales_by_year_region['Year'] == year]
-    for index, row in df_year.iterrows():
-        region = row['Sales Region']
-        value = row['Total Sales (Millions)']
-        fig.add_trace(go.Scatter(
-            x=[year],
-            y=[value],
-            mode='markers',
-            marker=dict(size=6, color='black'),
-            showlegend=False,
-            legendgroup=region,
-            visible=True,
-            name=region
-        ))
-        
-# Update the legend click behavior
-fig.for_each_trace(
-    lambda trace: trace.on_click(
-        lambda trace, points, selector: [
-            t.update(visible=not t.visible) for t in fig.data if t.legendgroup == trace.name
-        ]
+# Update the layout with white paper color, axis labels, and a title
+fig.update_layout(
+    plot_bgcolor='rgba(0,0,0)',
+    paper_bgcolor='black',
+    title={
+        'text': 'SALES EVOLUTION OVER TIME (2000-2015)',
+        'x': 0.5,
+        'font': {'size': 30, 'color': '#D9ED92'},
+        'xanchor': 'center'
+    },
+    xaxis=dict(gridcolor='black', title='Year', color='#D9ED92', tickmode='linear', dtick=1),
+    yaxis=dict(showline=True, linecolor='#D9ED92', gridcolor='black', color='#D9ED92', title='Total Sales (mm)'),
+    legend=dict(
+        traceorder='reversed',
+        font=dict(
+            size=16,
+            color='#D9ED92'
+        )
     )
 )
+
+
+
+
+
+
+
 
 # component 3
 genre_sales = df.groupby('Genre')['Global_Sales'].sum().sort_values(ascending=False)
 
 fig2 = go.Figure(data=[go.Bar(x=genre_sales.index, y=genre_sales.values)])
 
-fig2.update_layout(
-    title='TOTAL SALES BY GENRE',
-    xaxis=dict(title='Genre'),
-    yaxis=dict(title='Total Sales (in millions)'),
-    barmode='relative',
-    bargap=0.1,
-    bargroupgap=0.1,
-    plot_bgcolor='white',  # Set the plot background color to white
-    paper_bgcolor='white'  # Set the paper background color to white
-)
+
 
 # component 4
 
-# Select the top 3 'Platform' for JP, NA, and EU regions
-top_platform_jp = df[df['JP_Sales'] > 0].groupby('Platform')['JP_Sales'].sum().nlargest(5)
-top_platform_na = df[df['NA_Sales'] > 0].groupby('Platform')['NA_Sales'].sum().nlargest(5)
-top_platform_eu = df[df['EU_Sales'] > 0].groupby('Platform')['EU_Sales'].sum().nlargest(5)
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
-# Create the subplots figure for the pie charts
-fig3 = make_subplots(rows=1, cols=3, subplot_titles=['JAPAN', 'NORTH AMERICA', 'EUROPE'],
-                     specs=[[{'type': 'pie'}, {'type': 'pie'}, {'type': 'pie'}]])
+def get_top_platforms(region_sales_column):
+    top_platforms = df.groupby('Platform')[region_sales_column].sum().nlargest(5)
+    return top_platforms
 
-fig3.add_trace(go.Pie(labels=top_platform_jp.index, values=top_platform_jp.values,
-                      name='JAPAN', textinfo='percent', hoverinfo='label+value+percent',
-                      textfont=dict(size=10),
-                      marker=dict(line=dict(color='black', width=1))),
-               row=1, col=1)
+na_top_platforms = get_top_platforms('NA_Sales')
+eu_top_platforms = get_top_platforms('EU_Sales')
+jp_top_platforms = get_top_platforms('JP_Sales')
 
-# Create the pie chart for NA region
-fig3.add_trace(go.Pie(labels=top_platform_na.index, values=top_platform_na.values,
-                      name='NORTH AMERICA', textinfo='percent', hoverinfo='label+value+percent',
-                      textfont=dict(size=10),
-                      marker=dict(line=dict(color='black', width=1))),
-               row=1, col=2)
 
-# Create the pie chart for EU region
-fig3.add_trace(go.Pie(labels=top_platform_eu.index, values=top_platform_eu.values,
-                      name='EUROPE', textinfo='percent', hoverinfo='label+value+percent',
-                      textfont=dict(size=10),
-                      marker=dict(line=dict(color='black', width=1))),
-               row=1, col=3)
+platforms = list(na_top_platforms.index)
 
-# Update the layout of the figure
-fig3.update_layout(title='TOP PLATFORMS BY REGION')
+fig3 = go.Figure()
+
+fig3.add_trace(go.Bar(
+    x=platforms,
+    y=na_top_platforms.values,
+    name='North America',
+    marker_color='#184E77',
+    text=na_top_platforms.values,
+    texttemplate='%{text:.2f}mm$',
+    textposition='inside',
+    insidetextanchor='middle',
+    textfont=dict(color='black'),
+    marker=dict(line=dict(color='#D9ED92', width=1))
+))
+
+fig3.add_trace(go.Bar(
+    x=platforms,
+    y=eu_top_platforms.values,
+    name='Europe',
+    marker_color='#168AAD',
+    text=eu_top_platforms.values,
+    texttemplate='%{text:.2f}mm$',
+    textposition='inside',
+    insidetextanchor='middle',
+    textfont=dict(color='black'),
+    marker=dict(line=dict(color='#D9ED92', width=1))
+))
+
+fig3.add_trace(go.Bar(
+    x=platforms,
+    y=jp_top_platforms.values,
+    name='Japan',
+    marker_color='#76C893',
+    text=jp_top_platforms.values,
+    texttemplate='%{text:.2f}mm$',
+    textposition='inside',
+    insidetextanchor='middle',
+    textfont=dict(color='black'),
+    marker=dict(line=dict(color='#D9ED92', width=1))
+))
+
+
+
+
+fig3.update_layout(
+    barmode='relative',
+    title_text='MOST POPULAR PLATFORMS IN EVERY REGION',
+    xaxis_title='Platform',
+    yaxis_title='Sales (mm$)',
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    xaxis=dict(
+        tickfont=dict(color='#D9ED92'),
+        title=dict(text='Platform', font=dict(color='#D9ED92')),
+        gridcolor='black',
+        linecolor='black'
+    ),
+    yaxis=dict(
+        tickfont=dict(color='#D9ED92'),
+        title=dict(text='Sales (mm$)', font=dict(color='#D9ED92')),
+        gridcolor='black'
+    ),
+    font=dict(color='#D9ED92'),
+    title=dict(text='MOST POPULAR PLATFORMS IN EVERY REGION', font=dict(color='#D9ED92', size=30)),
+    legend=dict(
+        font=dict(
+            size=16
+        )
+    )
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 # component 5
-desired_platforms = ['PS4', 'XOne', 'PC', 'WiiU', '3DS']
-filtered_df = df[df['Platform'].isin(desired_platforms)]
 
-def get_top_10_games(region):
+def get_top_10_games(df, platforms, region):
+    filtered_df = df[df['Platform'].isin(platforms)]
     top_10_games = filtered_df.groupby('Name')[region].sum().nlargest(10).reset_index()
-    top_10_games = top_10_games.sort_values(by=region, ascending=True)  # Sort by the specified region
+    top_10_games = top_10_games.sort_values(by=region, ascending=False)  # Sort in descending order
     return top_10_games
 
+desired_platforms = ['PS4', 'XOne', 'PC', 'WiiU', '3DS']
 desired_regions = ['Global_Sales', 'JP_Sales', 'NA_Sales', 'EU_Sales', 'Other_Sales']
-region_labels = ['GLOBAL', 'JAPAN', 'NORTH AMERICA', 'EUROPE', 'OTHER REGIONS']  # Updated region labels
+region_labels = ['GLOBAL', 'JAPAN', 'NORTH AMERICA', 'EUROPE', 'OTHER REGIONS']
 initial_region = desired_regions[0]
-top_10_games = get_top_10_games(initial_region)
 
-fig5 = px.bar(top_10_games, x=initial_region, y='Name', orientation='h',
-              title=f'TOP 10 GAMES SOLD',
-              labels={initial_region: 'Total Sales (in millions)'},
-              text=initial_region)  # Set the text parameter to the sales value
-              
+top_10_games = get_top_10_games(df, desired_platforms, initial_region)
 
-dropdown_buttons = [
-    dict(label=label, method="update",  # Use the updated label
-         args=[{"x": [get_top_10_games(region)[region]],
-                "y": [get_top_10_games(region)['Name']]},
-               {"title": f"TOP 10 GAMES SOLD"}])  # Use the updated label
-    for region, label in zip(desired_regions, region_labels)
-]
+fig5 = go.Figure()
+
+bar_colors = ['#184E77', '#1E6091', '#1A759F', '#168AAD', '#34A0A4', '#52B69A', '#76C893', '#99D98C', '#B5E48C', '#D9ED92']
+
+fig5.add_trace(go.Bar(
+    x=top_10_games[initial_region][::1],
+    y=top_10_games['Name'][::1],
+    orientation='h',
+    text=top_10_games[initial_region][::1],
+    texttemplate='%{text:.2f}mm$',
+    textposition='inside',
+    marker=dict(
+        color=bar_colors,
+    ),
+    textfont=dict(color='black', size=14),
+))
+
+fig5.update_traces(marker_line_color='#D9ED92')
 
 fig5.update_layout(
-    plot_bgcolor='white',  # Set the plot background color to white
-    paper_bgcolor='white',  # Set the paper background color to white
-    updatemenus=[
-        dict(
-            buttons=dropdown_buttons,
-            direction="down",
-            pad={"r": 10, "t": 10},
-            showactive=True,
-            x=1.5,
-            xanchor="right",
-            y=1.04,
-            yanchor="top"
-        ),
-    ]
+    title=dict(
+        text='TOP 10 BESTSELLING GAMES (mm$)',
+        x=0.5,
+        font=dict(color='#D9ED92', size=30)
+    ),
+    xaxis=dict(title='', tickfont=dict(color='#D9ED92'), gridcolor='black', title_font=dict(color='#D9ED92'), showticklabels=False),
+    yaxis=dict(autorange="reversed", tickfont=dict(color='#D9ED92'), gridcolor='black', linecolor='black'),
+    plot_bgcolor='black',
+    paper_bgcolor='black',
 )
 
-fig5.update_traces(hovertemplate='%{text:.0f}M$', texttemplate='%{text:.0f}M$')
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -220,28 +305,61 @@ fig5.update_traces(hovertemplate='%{text:.0f}M$', texttemplate='%{text:.0f}M$')
 
 
 # Design the layout
-app.layout = html.Div([
-    dbc.Row([header_component]),
-    dbc.Row([
-        dbc.Col([
-            dcc.Graph(id='platform-pie-charts', figure=fig3)
-        ], width=6),  # Specify the width of the column to take up half of the row
-        dbc.Col([
-            dcc.Graph(
-        id='bar-chart',
-        figure=fig5)
-        ], width=6),  # Specify the width of the column to take up half of the row
-    ]),
-    dbc.Row([dbc.Col([dcc.Graph(figure=fig)])]),
-    dbc.Row([
-        dbc.Col([dcc.Graph(figure=treemap)]),
-        dbc.Col([
-            dcc.Dropdown(id="region-dropdown", options=REGION_OPTIONS, value="Global_Sales"),
-            dcc.Graph(id="genre-sales-bar-chart")
-        ])
-    ])
-])
+app.layout = html.Div(
+    style={'backgroundColor': '#D9ED92'},
+    children=[
+        dbc.Row([header_component], style={
+            'background-color': 'black',
+            'border-radius': '20px',
+            'padding': '20px',
+            'margin': '10px'
+        }),
+        dbc.Row([
+            dbc.Col([
+                dcc.Graph(id='bar-chart', figure=fig5)
+            ], width=6),
+            dbc.Col([
+                dcc.Graph(id='platform-pie-charts', figure=fig3)
+            ], width=6, )
+        ], style={
+            'background-color': 'black',
+            'border-radius': '20px',
+            'padding': '20px',
+            'margin': '10px'
+        }),
+        dbc.Row([dbc.Col([dcc.Graph(figure=fig)])], style={
+            'background-color': 'black',
+            'border-radius': '15px',
+            'padding': '0px',
+            'margin': '10px'
+        }),
+        dbc.Row([
+            dbc.Col([dcc.Graph(figure=treemap)]),
+            dbc.Col([
+    dcc.Graph(id="genre-sales-bar-chart"),
+    dcc.RadioItems(
+    id="region-radio",
+    options=REGION_OPTIONS,
+    value="Global_Sales",
+    labelStyle={'display': 'inline-block', 'margin-right': '20px'},  # Increase the margin-right value for more spacing
+    style={'color': '#D9ED92', 'text-align': 'center'}
+),
 
+])
+        ], style={
+            'background-color': 'black',
+            'border-radius': '15px',
+            'padding': '15px',
+            'margin': '10px'
+        }),
+        dbc.Row([header_component], style={
+            'background-color': 'black',
+            'border-radius': '15px',
+            'padding': '20px',
+            'margin': '10px'
+        }),
+    ]
+)
 
 
 
@@ -250,28 +368,59 @@ app.layout = html.Div([
 # callbacks
 @app.callback(
     Output("genre-sales-bar-chart", "figure"),
-    Input("region-dropdown", "value")
+    Input("region-radio", "value")
 )
 def update_genre_sales_bar_chart(selected_region):
     genre_sales = df.groupby('Genre')[selected_region].sum().sort_values(ascending=False)
 
-    fig2 = go.Figure(data=[go.Bar(x=genre_sales.index, y=genre_sales.values)])
+    # Define the colors for the bars based on the order of total sales
+    colors = ['#D9ED92', '#B5E48C', '#99D98C', '#76C893', '#52B69A', '#34A0A4', '#168AAD', '#1A759F', '#1E6091', '#184E77']
+    num_colors = len(colors)
+
+    # Normalize the total sales values between 0 and 1
+    normalized_sales = (genre_sales - genre_sales.min()) / (genre_sales.max() - genre_sales.min())
+
+    # Assign colors to the bars based on the normalized total sales
+    bar_colors = [colors[int((num_colors - 1) * value)] for value in normalized_sales]
+
+    fig2 = go.Figure(data=[go.Bar(x=genre_sales.index, y=genre_sales.values, marker=dict(color=bar_colors))])
 
     fig2.update_layout(
-        title=f'TOTAL SALES BY GENRE',
-        xaxis=dict(title='Genre'),
-        yaxis=dict(title='Total Sales (in millions)'),
-        barmode='relative',
-        bargap=0.1,
-        bargroupgap=0.1,
-        plot_bgcolor='white',  # Set the plot background color to white
-        paper_bgcolor='white'  # Set the paper background color to white
-    )
+    title={
+        'text': 'GAME TYPE PREFERENCE',
+        'x': 0.5,
+        'font': {'color': '#D9ED92', 'size': 30},
+        'xanchor': 'center',
+        'yanchor': 'top'
+    },
+    xaxis=dict(
+        title='Type',
+        title_font={'color': '#D9ED92'},  # Set x-axis title color to #D9ED92
+        tickfont={'color': '#D9ED92'},  # Set x-axis tick labels color to #D9ED92
+        gridcolor='black'  # Set x-axis grid lines color to black
+    ),
+    yaxis=dict(
+        title='Total Sales (mm$)',
+        title_font={'color': '#D9ED92'},  # Set y-axis title color to #D9ED92
+        tickfont={'color': '#D9ED92'},  # Set y-axis tick labels color to #D9ED92
+        gridcolor='black'  # Set y-axis grid lines color to black
+    ),
+    barmode='relative',
+    bargap=0.1,
+    bargroupgap=0.1,
+    plot_bgcolor='black',
+    paper_bgcolor='black'
+)
+
+    fig2.update_traces(
+    texttemplate='%{y:.0f}mm$',
+    textposition='auto',
+    textangle=0,
+    textfont=dict(color='black', size=12)  # Set bar label color to black and size to 12
+)
+
 
     return fig2
-
-
-
 
 
 
